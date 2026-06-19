@@ -67,9 +67,11 @@ async def ingest_readings(
         if abs(r.value) > abs(threshold)
     ]
 
-    async with session.begin():
-        await session.execute(insert(Reading), reading_rows)
-        if alert_rows:
-            await session.execute(insert(Alert), alert_rows)
+    # Both inserts + the commit form one transaction (the session has already
+    # autobegun from the sensor lookup), so a failure leaves no partial batch.
+    await session.execute(insert(Reading), reading_rows)
+    if alert_rows:
+        await session.execute(insert(Alert), alert_rows)
+    await session.commit()
 
     return len(reading_rows), len(alert_rows)

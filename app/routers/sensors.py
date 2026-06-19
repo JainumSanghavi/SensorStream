@@ -42,7 +42,9 @@ async def _get_sensor_or_404(session: AsyncSession, sensor_id: int) -> Sensor:
 @router.get("", response_model=Page[SensorOut])
 async def list_sensors(
     page: int = Query(1, ge=1),
-    page_size: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
+    page_size: int = Query(
+        settings.default_page_size, ge=1, le=settings.max_page_size, alias="pageSize"
+    ),
     session: AsyncSession = Depends(get_session),
 ) -> Page[SensorOut]:
     """List sensors with OFFSET pagination.

@@ -17,7 +17,9 @@ async def list_alerts(
     status: AlertStatus | None = Query(None),
     sensor_id: int | None = Query(None, alias="sensorId"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
+    page_size: int = Query(
+        settings.default_page_size, ge=1, le=settings.max_page_size, alias="pageSize"
+    ),
     session: AsyncSession = Depends(get_session),
 ) -> Page[AlertOut]:
     """List alerts, optionally filtered by status (rides ix_alerts_status)."""
