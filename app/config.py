@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://sensor:sensor@localhost:5432/sensorstream"
     log_level: str = "INFO"
 
+    # Static API key gating the mutating endpoints (ingest/patch/delete). When
+    # unset, write auth is DISABLED (a startup warning is logged) so local dev
+    # and tests stay frictionless; set it to require an X-API-Key header.
+    api_key: str | None = None
+
     # Cap batch ingest size so a single request can't exhaust memory / a txn.
     max_batch_size: int = 10_000
     # Default + max page sizes for list endpoints.
