@@ -21,13 +21,15 @@ async def health(session: AsyncSession = Depends(get_session)) -> dict:
     return {"status": "ok" if db_ok else "degraded", "database": db_ok}
 
 
-@router.get("/metrics")
-async def metrics_endpoint(session: AsyncSession = Depends(get_session)) -> dict:
-    """Basic operational counters.
+@router.get("/metrics/summary")
+async def metrics_summary(session: AsyncSession = Depends(get_session)) -> dict:
+    """Human-readable operational summary (JSON).
 
-    Process-lifetime counters (ingestion rate, since-start totals) come from the
-    in-memory metrics module; durable totals (total readings, active alerts)
-    are read from the DB so they're correct across restarts.
+    The canonical scrape endpoint is `/metrics` (Prometheus text format, wired
+    in app/observability.py). This sibling returns the same business numbers in
+    a shape that's pleasant to eyeball: process-lifetime counters from the
+    in-memory metrics module, plus durable totals (total readings, active
+    alerts) read from the DB so they're correct across restarts.
     """
     total_readings = await session.scalar(select(func.count()).select_from(Reading))
     active_alerts = await session.scalar(

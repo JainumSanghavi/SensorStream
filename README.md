@@ -25,7 +25,10 @@ pattern rather than feature breadth.
 # 1. Run the whole stack (Postgres + API) with one command.
 cp .env.example .env
 docker compose up --build
-#   API:  http://localhost:8000      docs: http://localhost:8000/docs
+#   API:         http://localhost:8000        docs: http://localhost:8000/docs
+#   Grafana:     http://localhost:3000        (anonymous viewer; dashboard auto-provisioned)
+#   Prometheus:  http://localhost:9090
+#   Jaeger:      http://localhost:16686       (traces)
 
 # 2. (optional) Load synthetic telemetry. Run from the host against the
 #    exposed Postgres, or `docker compose exec api ...`.
@@ -126,7 +129,8 @@ A real deployment would issue per-client keys or JWTs — see the scale notes.
 | `PATCH /sensors/{id}`                  | Partial update (e.g. `alertThreshold`).                        |
 | `DELETE /sensors/{id}`                 | `204 No Content`.                                              |
 | `GET /health`                          | Liveness + DB connectivity.                                    |
-| `GET /metrics`                         | Counters: total readings, active alerts, ingestion rate.       |
+| `GET /metrics`                         | **Prometheus** exposition: request rate, latency histograms, ingest/alert counters. |
+| `GET /metrics/summary`                 | Human-readable JSON ops summary: total readings, active alerts, ingestion rate. |
 
 Example — batch ingest:
 
@@ -139,6 +143,32 @@ curl -X POST localhost:8000/sensors/1/readings -H 'content-type: application/jso
 }'
 # -> 201 {"sensorId":1,"ingested":2,"alertsTriggered":1}
 ```
+
+---
+
+## Observability
+
+`docker compose up` brings up a full local monitoring stack alongside the API —
+**Prometheus** (scrape), **Grafana** (dashboards), and **Jaeger** (traces) — so
+the system is observable out of the box, no cloud account required.
+
+![SensorStream Grafana dashboard](docs/grafana-dashboard.png)
+
+- **Metrics.** `/metrics` serves Prometheus exposition format. HTTP-level
+  metrics (request rate, latency histograms, in-flight requests) are
+  auto-instrumented; domain metrics — `sensorstream_readings_ingested_total`,
+  `sensorstream_alerts_triggered_total`, and an `sensorstream_ingest_batch_size`
+  histogram — are declared in `app/metrics.py` and incremented on the ingest
+  path. Prometheus scrapes it every 5s (`ops/prometheus.yml`).
+- **Dashboard.** Grafana auto-provisions a datasource and the **SensorStream**
+  dashboard (`ops/grafana/dashboards/sensorstream.json`): request rate, p50/p95/p99
+  latency, ingestion throughput, alert rate, 5xx error rate, and ingest batch-size
+  distribution. It loads on startup with no manual import.
+- **Tracing.** When `OTEL_EXPORTER_OTLP_ENDPOINT` is set (it is, in compose),
+  OpenTelemetry instruments FastAPI and SQLAlchemy and exports spans to Jaeger,
+  so a slow request can be traced down to the individual SQL statement. Tracing
+  is fully optional and defensive — unset the env var and it's a clean no-op, so
+  local runs and the test suite need no collector. See `app/observability.py`.
 
 ---
 
@@ -230,9 +260,11 @@ would reach for:
 - **Horizontal scaling**: the API is stateless, so it scales out behind a load
   balancer trivially; the database is the bottleneck, addressed by read replicas
   for query traffic, connection pooling (PgBouncer), and the partitioning above.
-- **Real metrics**: the `/metrics` counters are in-process and reset on restart.
-  Production would export to Prometheus/OpenTelemetry with proper histograms for
-  latency and ingest rate rather than module-level counters.
+- **Metrics at scale**: the Prometheus + OpenTelemetry stack here is real but
+  single-instance. Across many replicas, production would scrape each pod
+  (service discovery), centralize with remote-write to a long-term store
+  (Thanos/Mimir/managed Grafana Cloud), and sample traces rather than export
+  every span.
 - **Alert lifecycle**: resolve/ack endpoints, dedup/debounce so a stuck sensor
   doesn't emit thousands of alerts, and notification fan-out — left out to keep
   the alerting path focused on the ingestion-time trigger pattern.
@@ -257,11 +289,16 @@ app/
   pagination.py      keyset cursor encode/decode
   errors.py          shared error envelope + handlers
   logging_config.py  structured request logging
-  metrics.py         in-process counters
+  metrics.py         Prometheus instruments + in-process counters
+  observability.py   Prometheus /metrics wiring + OpenTelemetry tracing
+  auth.py            API-key dependency for write endpoints
   routers/           sensors, stats, alerts, health
 migrations/001_schema.sql   DDL + documented indexes
+ops/prometheus.yml          Prometheus scrape config
+ops/grafana/                provisioned datasource + SensorStream dashboard
 scripts/seed.py             COPY-based synthetic seeder
 scripts/simulator.py        live ingestion demo
 docs/PERFORMANCE.md         EXPLAIN ANALYZE before/after
+docs/grafana-dashboard.png  dashboard screenshot
 tests/                      pytest suite (real Postgres)
 ```
