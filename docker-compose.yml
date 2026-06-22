@@ -23,8 +23,56 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-sensor}:${POSTGRES_PASSWORD:-sensor}@db:5432/${POSTGRES_DB:-sensorstream}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Tracing on by default in compose; export OTLP spans to Jaeger.
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME: sensorstream
     ports:
       - "8000:8000"
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./ops/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      # Anonymous viewer access so the dashboard opens without a login prompt.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      # Server-side PNG rendering (used by the optional `renderer` service below).
+      GF_RENDERING_SERVER_URL: http://renderer:8081/render
+      GF_RENDERING_CALLBACK_URL: http://grafana:3000/
+    volumes:
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+  # Optional: server-side dashboard PNG rendering. Lives behind a profile so the
+  # default stack stays lean. Bring it up with:
+  #   docker compose --profile rendering up -d renderer
+  renderer:
+    image: grafana/grafana-image-renderer:3.11.5
+    profiles: ["rendering"]
+    ports:
+      - "8081:8081"
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4318:4318"      # OTLP/HTTP receiver
 
 volumes:
   pgdata:

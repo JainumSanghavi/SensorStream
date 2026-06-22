@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.db import engine
 from app.errors import register_exception_handlers
 from app.logging_config import configure_logging, request_logging_middleware
+from app.observability import setup_observability
 from app.routers import alerts, health, sensors, stats
 
 logger = logging.getLogger("sensorstream")
@@ -48,6 +49,9 @@ def create_app() -> FastAPI:
     app.include_router(sensors.router)
     app.include_router(stats.router)
     app.include_router(alerts.router)
+
+    # Prometheus /metrics + (optional) OpenTelemetry tracing.
+    setup_observability(app)
     return app
 
 
