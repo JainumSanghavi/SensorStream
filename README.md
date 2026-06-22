@@ -1,5 +1,7 @@
 # SensorStream
 
+[![CI](https://github.com/JainumSanghavi/SensorStream/actions/workflows/ci.yml/badge.svg)](https://github.com/JainumSanghavi/SensorStream/actions/workflows/ci.yml)
+
 A real-time industrial sensor **ingestion and alerting backend**. Facilities
 stream high-frequency telemetry (flow, temperature, energy, pressure); the
 service bulk-ingests batches, fires alerts on threshold breaches, and serves
@@ -107,6 +109,11 @@ source of truth, applied idempotently on startup by `app/init_db.py`. The ORM in
 All list endpoints return an envelope `{ "data": [...], "pagination": {...} }`.
 All errors return one shape: `{ "error": { "code", "message", "details" } }`.
 JSON fields are **camelCase**; timestamps are **ISO 8601 UTC**.
+
+**Auth:** the mutating endpoints (`POST` ingest, `PATCH`, `DELETE`) require an
+`X-API-Key` header when `API_KEY` is set. With `API_KEY` unset, write auth is
+disabled (a startup warning is logged) so local dev and tests stay frictionless.
+A real deployment would issue per-client keys or JWTs — see the scale notes.
 
 | Method & path                          | Purpose                                                        |
 | -------------------------------------- | -------------------------------------------------------------- |

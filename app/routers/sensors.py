@@ -7,6 +7,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import metrics
+from app.auth import require_api_key
 from app.config import get_settings
 from app.db import get_session
 from app.errors import AppError, NotFoundError
@@ -75,7 +76,11 @@ async def get_sensor(
     return SensorOut.model_validate(sensor)
 
 
-@router.patch("/{sensor_id}", response_model=SensorOut)
+@router.patch(
+    "/{sensor_id}",
+    response_model=SensorOut,
+    dependencies=[Depends(require_api_key)],
+)
 async def patch_sensor(
     sensor_id: int,
     payload: SensorUpdate,
@@ -97,7 +102,11 @@ async def patch_sensor(
     return SensorOut.model_validate(sensor)
 
 
-@router.delete("/{sensor_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{sensor_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_api_key)],
+)
 async def delete_sensor(
     sensor_id: int, session: AsyncSession = Depends(get_session)
 ) -> Response:
@@ -114,6 +123,7 @@ async def delete_sensor(
     "/{sensor_id}/readings",
     status_code=status.HTTP_201_CREATED,
     response_model=IngestSummary,
+    dependencies=[Depends(require_api_key)],
 )
 async def ingest(
     sensor_id: int,
